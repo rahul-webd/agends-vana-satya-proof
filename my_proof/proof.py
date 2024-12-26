@@ -1,12 +1,9 @@
-import json
 import logging
 import os
 from typing import Dict, Any
-
+import hashlib
 import requests
-
 from my_proof.models.proof_response import ProofResponse
-
 
 class Proof:
     def __init__(self, config: Dict[str, Any]):
@@ -14,60 +11,91 @@ class Proof:
         self.proof_response = ProofResponse(dlp_id=config['dlp_id'])
 
     def generate(self) -> ProofResponse:
-        """Generate proofs for all input files."""
-        logging.info("Starting proof generation")
+        try:
+            """Generate proofs for all input files."""
+            logging.info("Starting proof generation")
 
-        # Iterate through files and calculate data validity
-        account_email = None
-        total_score = 0
+            ownership = 0
+            authenticity = 0
+            uniqueness = 0
+            quality = 0
+            file_hash: str | None = None
+            hash_id: str | None = None
 
-        for input_filename in os.listdir(self.config['input_dir']):
-            input_file = os.path.join(self.config['input_dir'], input_filename)
-            if os.path.splitext(input_file)[1].lower() == '.json':
-                with open(input_file, 'r') as f:
-                    input_data = json.load(f)
+            agends_url = "https://agends-be-production.up.railway.app" if self.config['env'] == 'production' else "https://agends-be-staging.up.railway.app"
 
-                    if input_filename == 'account.json':
-                        account_email = input_data.get('email', None)
-                        continue
+            input_files = os.listdir(self.config['input_dir'])
+            # Expecting one zip file
+            input_file = input_files[0]
 
-                    elif input_filename == 'activity.json':
-                        total_score = sum(item['score'] for item in input_data)
-                        continue
+            # Calculate SHA-256 hash of the input file
+            sha256_hash = hashlib.sha256()
+            with open(input_file, 'rb') as f:
+                for byte_block in iter(lambda: f.read(4096), b""):
+                    sha256_hash.update(byte_block, 'binary')
+            file_hash = sha256_hash.digest('base64')
 
-        email_matches = self.config['user_email'] == account_email
-        score_threshold = fetch_random_number()
+            hash_response = requests.get(
+                agends_url + '/vana-package-hash',
+                headers={'Authorization': 'Bearer ' + self.config.get('agends_auth_token')},
+                params={'hash': file_hash}
+            )
 
-        # Calculate proof-of-contribution scores: https://docs.vana.org/vana/core-concepts/key-elements/proof-of-contribution/example-implementation
-        self.proof_response.ownership = 1.0 if email_matches else 0.0  # Does the data belong to the user? Or is it fraudulent?
-        self.proof_response.quality = max(0, min(total_score / score_threshold, 1.0))  # How high quality is the data?
-        self.proof_response.authenticity = 0  # How authentic is the data is (ie: not tampered with)? (Not implemented here)
-        self.proof_response.uniqueness = 0  # How unique is the data relative to other datasets? (Not implemented here)
+            if hash_response.status_code == 200:
+                data = hash_response.json()
+                if data:
+                    hash_id = data.get('id')
 
-        # Calculate overall score and validity
-        self.proof_response.score = 0.6 * self.proof_response.quality + 0.4 * self.proof_response.ownership
-        self.proof_response.valid = email_matches and total_score >= score_threshold
+                    if data.get('validated', False):
+                        ownership = 1.0
+                        authenticity = 1.0
+                        uniqueness = 1.0
 
-        # Additional (public) properties to include in the proof about the data
-        self.proof_response.attributes = {
-            'total_score': total_score,
-            'score_threshold': score_threshold,
-            'email_verified': email_matches,
-        }
+                        file_size = os.path.getsize(input_file)
 
-        # Additional metadata about the proof, written onchain
-        self.proof_response.metadata = {
-            'dlp_id': self.config['dlp_id'],
-        }
+                        if file_size > 1024 * 1024:  # file size greater than 1 MB
+                            quality = 1.0
+                        elif file_size > 1024:
+                            quality = 0.5
+                        else: 
+                            quality = 0
 
-        return self.proof_response
+                        logging.info(f"Authentication Passed, Ownership Passed and Uniqueness Passed")
+                    else:
+                        ownership = 1.0
+                        authenticity = 1.0
+                        uniqueness = 0
+                        quality = 0
 
+                        logging.info(f"Authentication Passed and Ownership Passed")
+                else: 
+                    raise ValueError(f"Invalid File")
+            else:
+                raise ValueError(f"Failed to validate file with status code {hash_response.status_code}")
+            
+            self.proof_response.ownership = ownership
+            self.proof_response.quality = quality
+            self.proof_response.authenticity = authenticity
+            self.proof_response.uniqueness = uniqueness
 
-def fetch_random_number() -> float:
-    """Demonstrate HTTP requests by fetching a random number from random.org."""
-    try:
-        response = requests.get('https://www.random.org/decimal-fractions/?num=1&dec=2&col=1&format=plain&rnd=new')
-        return float(response.text.strip())
-    except requests.RequestException as e:
-        logging.warning(f"Error fetching random number: {e}. Using local random.")
-        return __import__('random').random()
+            self.proof_response.score = self.proof_response.quality
+            self.proof_response.valid = authenticity > 0
+
+            # Additional metadata about the proof, written onchain
+            self.proof_response.metadata = {
+                'dlp_id': self.config['dlp_id'],
+                'file_hash': file_hash
+            }
+
+            mark_hash_valid_response = requests.post(
+                agends_url + '/vana-package-hash/mark-valid',
+                headers={'Authorization': 'Bearer ' + self.config.get('agends_auth_token')},
+                params={'hash_id': hash_id}
+            )
+
+            if (mark_hash_valid_response.status_code != 201):
+                raise ValueError('Something unexpected occurred!')
+
+            return self.proof_response
+        except Exception as e:
+            raise ValueError(f"An error occurred during proof generation: {e}")
