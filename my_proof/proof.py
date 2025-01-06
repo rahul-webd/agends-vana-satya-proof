@@ -22,7 +22,12 @@ class Proof:
             file_hash: str | None = None
             hash_id: str | None = None
 
-            agends_url = "https://agends-be-production.up.railway.app" if self.config['env'] == 'production' else "https://agends-be-staging.up.railway.app"
+            agends_url = 'https://apparently-finer-hen.ngrok-free.app'
+
+            if self.config['env'] == 'production':
+                agends_url = "https://agends-be-production.up.railway.app" 
+            elif self.config['env'] == 'development':
+                agends_url = "https://agends-be-staging.up.railway.app"
 
             input_files = os.listdir(self.config['input_dir'])
             # Expecting one zip file
