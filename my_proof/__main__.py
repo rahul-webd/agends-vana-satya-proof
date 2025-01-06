@@ -14,10 +14,18 @@ logging.basicConfig(level=logging.INFO, format='%(message)s')
 
 def load_config() -> Dict[str, Any]:
     """Load proof configuration from environment variables."""
+    env = os.environ.get('ENV')
+    dlp_id = 23
+
+    if env == 'production':
+        dlp_id = 0
+    elif env == 'staging':
+        dlp_id = 0
+
     config = {
-        'dlp_id': 1234,  # Set your own DLP ID here
+        'dlp_id': dlp_id, 
         'input_dir': INPUT_DIR,
-        'env': os.environ.get('ENV'),
+        'env': env,
         'agends_auth_token': os.environ.get('AGENDS_AUTH_TOKEN', None),
     }
     logging.info(f"Using config: {json.dumps(config, indent=2)}")
