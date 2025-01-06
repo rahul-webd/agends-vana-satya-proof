@@ -26,7 +26,7 @@ class Proof:
 
             if self.config['env'] == 'production':
                 agends_url = "https://agends-be-production.up.railway.app" 
-            elif self.config['env'] == 'development':
+            elif self.config['env'] == 'staging':
                 agends_url = "https://agends-be-staging.up.railway.app"
 
             input_files = os.listdir(self.config['input_dir'])
