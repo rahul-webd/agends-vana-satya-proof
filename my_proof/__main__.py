@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO, format='%(message)s')
 def load_config() -> Dict[str, Any]:
     """Load proof configuration from environment variables."""
     env = os.environ.get('ENV')
-    dlp_id = 23
+    dlp_id = 30
 
     if env == 'production':
         dlp_id = 0
