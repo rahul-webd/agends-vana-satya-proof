@@ -43,6 +43,7 @@ def run() -> None:
     proof = Proof(config)
     proof_response = proof.generate()
 
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
     output_path = os.path.join(OUTPUT_DIR, "results.json")
     with open(output_path, 'w') as f:
         json.dump(proof_response.dict(), f, indent=2)

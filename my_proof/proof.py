@@ -3,6 +3,7 @@ import os
 from typing import Dict, Any
 import hashlib
 import requests
+import json
 from my_proof.models.proof_response import ProofResponse
 
 class Proof:
@@ -32,13 +33,14 @@ class Proof:
             input_files = os.listdir(self.config['input_dir'])
             # Expecting one zip file
             input_file = input_files[0]
+            input_file_path = self.config['input_dir'] + '/' + input_file
 
             # Calculate SHA-256 hash of the input file
             sha256_hash = hashlib.sha256()
-            with open(input_file, 'rb') as f:
+            with open(input_file_path, 'rb') as f:
                 for byte_block in iter(lambda: f.read(4096), b""):
-                    sha256_hash.update(byte_block, 'binary')
-            file_hash = sha256_hash.digest('base64')
+                    sha256_hash.update(byte_block)
+            file_hash = sha256_hash.hexdigest()
 
             hash_response = requests.get(
                 agends_url + '/vana-package-hash',
@@ -56,7 +58,7 @@ class Proof:
                         authenticity = 1.0
                         uniqueness = 1.0
 
-                        file_size = os.path.getsize(input_file)
+                        file_size = os.path.getsize(input_file_path)
 
                         if file_size > 1024 * 1024:  # file size greater than 1 MB
                             quality = 1.0
