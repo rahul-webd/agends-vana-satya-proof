@@ -53,7 +53,7 @@ class Proof:
                 if data:
                     hash_id = data.get('id')
 
-                    if data.get('validated', False):
+                    if data.get('validated') == False:
                         ownership = 1.0
                         authenticity = 1.0
                         uniqueness = 1.0
